@@ -68,9 +68,7 @@ Usefull links
 import os, time
 
 def encode(x):
-  if False:
-    return x.encode('utf-8')
-  return x
+  return str.encode(x)
 
 try:
     import PIL
@@ -349,7 +347,7 @@ class GifWriter:
                 y0, y1 = 0, 2
 
             # Cut out and store
-            im2 = im[y0:y1,x0:x1]
+            im2 = im[y0[0]:y1[0],x0[0]:x1[0]]
             prev = im
             ims2.append(im2)
             xy.append((x0,y0))

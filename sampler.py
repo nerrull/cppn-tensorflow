@@ -27,15 +27,15 @@ import math
 import random
 import PIL
 from PIL import Image
-import pylab
 from model import CPPN
 import matplotlib.pyplot as plt
-import images2gif
 from images2gif import writeGif
 
-mgc = get_ipython().magic
-mgc(u'matplotlib inline')
-pylab.rcParams['figure.figsize'] = (10.0, 10.0)
+#import pylab
+
+#mgc = get_ipython().magic
+#mgc(u'matplotlib inline')
+#pylab.rcParams['figure.figsize'] = (10.0, 10.0)
 
 class Sampler():
   def __init__(self, z_dim = 8, c_dim = 1, scale = 10.0, net_size = 32):
@@ -53,6 +53,15 @@ class Sampler():
       z = np.reshape(z, (1, self.cppn.z_dim))
     self.z = z
     return self.cppn.generate(z, x_dim, y_dim, scale)[0]
+
+  def train(self,image_path="", z = None, x_dim=1, y_dim=1, scale = 10.0):
+    if z is None:
+      z = self.generate_z()
+    else:
+      z = np.reshape(z, (1, self.cppn.z_dim))
+    self.z = z
+    return self.cppn.train(z=z,image_path=image_path, scale=scale)
+
   def show_image(self, image_data):
     '''
     image_data is a tensor, in [height width depth]
@@ -104,7 +113,7 @@ class Sampler():
     for i in range(total_frames):
       z = z1 + delta_z*float(i)
       images.append(self.to_image(self.generate(z, x_dim, y_dim, scale)))
-      print "processing image ", i
+      print ("processing image ", i)
     durations = [duration1]+[duration]*n_frame+[duration2]
     if reverse == True: # go backwards in time back to the first state
       revImages = list(images)
@@ -112,5 +121,5 @@ class Sampler():
       revImages = revImages[1:]
       images = images+revImages
       durations = durations + [duration]*n_frame + [duration1]
-    print "writing gif file..."
+    print("writing gif file...")
     writeGif(filename, images, duration = durations)

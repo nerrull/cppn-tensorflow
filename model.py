@@ -10,9 +10,10 @@ https://en.wikipedia.org/wiki/Compositional_pattern-producing_network
 import numpy as np
 import tensorflow as tf
 from ops import *
+from scipy import ndimage
 
 class CPPN():
-  def __init__(self, batch_size=1, z_dim = 32, c_dim = 1, scale = 8.0, net_size = 32):
+  def __init__(self, batch_size=1, z_dim = 32, c_dim = 3, scale = 8.0, net_size = 32):
     """
 
     Args:
@@ -25,8 +26,8 @@ class CPPN():
 
     self.batch_size = batch_size
     self.net_size = net_size
-    x_dim = 256
-    y_dim = 256
+    x_dim = 1
+    y_dim = 1
     self.x_dim = x_dim
     self.y_dim = y_dim
     self.scale = scale
@@ -49,8 +50,7 @@ class CPPN():
     self.r = tf.placeholder(tf.float32, [self.batch_size, None, 1])
 
     # builds the generator network
-    self.G = self.generator(x_dim = self.x_dim, y_dim = self.y_dim)
-
+    self.G = self.trainer(x_dim = self.x_dim, y_dim = self.y_dim, source=[1,1,1])
     self.init()
 
   def init(self):
@@ -79,6 +79,38 @@ class CPPN():
     y_mat = np.tile(y_mat.flatten(), self.batch_size).reshape(self.batch_size, n_points, 1)
     r_mat = np.tile(r_mat.flatten(), self.batch_size).reshape(self.batch_size, n_points, 1)
     return x_mat, y_mat, r_mat
+
+
+  def trainer(self, x_dim, y_dim, source, reuse= False):
+    if reuse:
+        tf.get_variable_scope().reuse_variables()
+
+    net_size = self.net_size
+    n_points = x_dim * y_dim
+    z_scaled = tf.reshape(self.z, [self.batch_size, 1, self.z_dim]) * \
+               tf.ones([n_points, 1], dtype=tf.float32) * self.scale
+    z_unroll = tf.reshape(z_scaled, [self.batch_size * n_points, self.z_dim])
+    x_unroll = tf.reshape(self.x, [self.batch_size * n_points, 1])
+    y_unroll = tf.reshape(self.y, [self.batch_size * n_points, 1])
+    r_unroll = tf.reshape(self.r, [self.batch_size * n_points, 1])
+
+    U = fully_connected(z_unroll, net_size, 'g_0_z') + \
+        fully_connected(x_unroll, net_size, 'g_0_x', with_bias=False) + \
+        fully_connected(y_unroll, net_size, 'g_0_y', with_bias=False) + \
+        fully_connected(r_unroll, net_size, 'g_0_r', with_bias=False)
+
+    H = tf.nn.tanh(U)
+    for i in range(4):
+      H = tf.nn.relu(fully_connected(H, net_size, 'g_tanh_' + str(i)))
+    output = tf.nn.relu(fully_connected(H, self.c_dim, 'g_final'))
+
+    source_unroll = tf.reshape(source,[self.batch_size*n_points,self.c_dim])
+    diff = output-tf.to_float(source_unroll)/256.0
+    cost = tf.mul(diff,diff)
+    costP =tf.Print(cost, [cost], message='Cost : ', summarize=20)
+    step = tf.train.GradientDescentOptimizer(0.1).minimize(costP)
+
+    return step
 
   def generator(self, x_dim, y_dim, reuse = False):
 
@@ -184,6 +216,19 @@ class CPPN():
     G = self.generator(x_dim = x_dim, y_dim = y_dim, reuse = True)
     x_vec, y_vec, r_vec = self._coordinates(x_dim, y_dim, scale = scale)
     image = self.sess.run(G, feed_dict={self.z: z, self.x: x_vec, self.y: y_vec, self.r: r_vec})
+    return image
+
+  def train(self, z=None, x_dim = 32, y_dim = 32, scale = 8.0, image_path=""):
+    image = ndimage.imread(image_path)
+    #image = tf.image.decode_jpeg(image_path, channels=3)
+    #image = tf.image.decode_jpeg(image_path, channels=3)
+    [x_dim, y_dim, _] = image.shape
+    print ("x:{}, y:{} ".format(x_dim,y_dim))
+
+    G = self.trainer(x_dim=x_dim, y_dim=y_dim, source=image, reuse=True)
+    x_vec, y_vec, r_vec = self._coordinates(x_dim, y_dim, scale=scale)
+    step = self.sess.run(G, feed_dict={self.z: z, self.x: x_vec, self.y: y_vec, self.r: r_vec})
+
     return image
 
   def close(self):
